@@ -1,7 +1,171 @@
 ---
-title: "text-opt-quarto1"
+title: "AI Therapeutic Response Generator"
+format: 
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    highlight-style: github
+    css: custom.css
+    page-layout: full
+    embed-resources: true
+jupyter: python3
 ---
 
-## Quarto
+```{python}
+#| label: setup
+#| warning: false
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+import os
+import time
+import json
+import requests
+import logging
+import pickle
+from dataclasses import dataclass
+from typing import List, Dict, Tuple, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+@dataclass
+class TherapeuticResponse:
+    """Enhanced therapeutic response container"""
+    text: str
+    timestamp: float
+    error: bool = False
+    processing_time: float = 0.0
+    error_details: str = ""
+    timeout: bool = False
+    empathy_score: float = 0.0
+    safety_checks: List[str] = None
+    ethical_considerations: List[str] = None
+    refinement_suggestions: List[str] = None
+    crisis_flag: bool = False
+
+class OllamaClient:
+    """Ollama client with therapeutic safety features"""
+    
+    def __init__(self, model_name: str = "hf.co/TheDrummer/Gemmasutra-Mini-2B-v1-GGUF:Q3_K_L", 
+                 base_url: str = "http://localhost:11434"):
+        self.model_name = model_name
+        self.base_url = base_url
+        self.max_retries = 5
+        self.request_timeout = 300
+        self._verify_model()
+
+    def _parse_json_safe(self, text: str):
+        """JSON parsing with error recovery"""
+        clean_text = text.strip()
+        if not clean_text:
+            return {"error": "Empty response"}
+        try:
+            return json.loads(clean_text)
+        except json.JSONDecodeError:
+            start = clean_text.find('{')
+            end = clean_text.rfind('}') + 1
+            return json.loads(clean_text[start:end]) if start != -1 else {"error": "Invalid JSON"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _verify_model(self):
+        """Model verification with auto-download"""
+        for attempt in range(self.max_retries):
+            try:
+                resp = requests.get(f"{self.base_url}/api/tags", timeout=10)
+                if resp.ok:
+                    models = [m['name'] for m in resp.json().get('models', [])]
+                    if any(self.model_name in m for m in models):
+                        return
+                    self._pull_model()
+                    return
+            except Exception as e:
+                logger.warning(f"Model check failed: {str(e)}")
+                time.sleep(2 ** attempt)
+        raise ConnectionError(f"Connection failed after {self.max_retries} attempts")
+
+    def _pull_model(self):
+        """Model download handler"""
+        try:
+            resp = requests.post(
+                f"{self.base_url}/api/pull",
+                json={"name": self.model_name},
+                stream=True,
+                timeout=600
+            )
+            for line in resp.iter_lines():
+                if line:
+                    status = json.loads(line).get('status', '')
+                    logger.info(f"Download: {status}")
+        except Exception as e:
+            logger.error(f"Model pull failed: {str(e)}")
+            raise
+
+    def generate(self, prompt: str) -> Tuple[str, bool]:
+        """Safe text generation"""
+        for attempt in range(self.max_retries):
+            try:
+                with ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        requests.post,
+                        f"{self.base_url}/api/generate",
+                        json={
+                            "model": self.model_name,
+                            "prompt": prompt[:4000],
+                            "stream": False,
+                            "options": {"temperature": 0.5}
+                        },
+                        timeout=self.request_timeout
+                    )
+                    resp = future.result(timeout=self.request_timeout)
+                    data = self._parse_json_safe(resp.text)
+                    return data.get("response", ""), False
+            except FutureTimeoutError:
+                logger.warning(f"Timeout (attempt {attempt+1})")
+                return f"Timeout after {self.request_timeout}s", True
+            except Exception as e:
+                logger.error(f"Error: {str(e)}")
+                time.sleep(1)
+        return "Max retries exceeded", True
+
+class BaseAgent:
+    """Therapeutic response agent"""
+    
+    def __init__(self, client: OllamaClient):
+        self.client = client
+        self.retry_count = 3
+        self.max_wait = 300
+
+    def safe_generate(self, prompt: str) -> TherapeuticResponse:
+        """Generation with safety checks"""
+        start_time = time.time()
+        response = TherapeuticResponse(text="", timestamp=start_time)
+        
+        if not isinstance(prompt, str) or len(prompt.strip()) == 0:
+            return TherapeuticResponse(
+                text="Invalid prompt",
+                timestamp=start_time,
+                error=True,
+                processing_time=0.0
+            )
+            
+        for attempt in range(self.retry_count):
+            try:
+                with ThreadPoolExecutor() as executor:
+                    future = executor.submit(self.client.generate, prompt)
+                    text, error = future.result(timeout=self.max_wait)
+                    response.text = text
+                    response.error = error
+                    response.processing_time = time.time() - start_time
+                    return response
+            except FutureTimeoutError:
+                response.timeout = True
+            except Exception as e:
+                response.error_details = str(e)
+
+        response.error = True
+        return response
