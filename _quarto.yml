@@ -1,5 +1,18 @@
 project:
-  title: "text-opt-quarto1"
+  title: "Philosophical Response Generator"
+  
+format:
+  html:
+    theme: minty
+    code-fold: true
+    code-tools: true
+    code-line-numbers: true
+    page-layout: full
 
+engine: jupyter
+jupyter: python3
 
-
+execute:
+  echo: true
+  warning: false
+  error: false
