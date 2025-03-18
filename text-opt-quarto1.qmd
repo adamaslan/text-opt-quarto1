@@ -1,24 +1,18 @@
 ---
-title: "AI Therapeutic Response Generator 🤖💬"
-subtitle: "Empathetic AI Mental Health Support"
-author: "AI Health Team"
+title: "Philosophical Response Generator"
 format: 
   html:
     theme: minty
-    highlight-style: dracula
     code-fold: true
-    code-summary: "Show/Hide Code Implementation"
     code-tools: true
     code-line-numbers: true
     page-layout: full
-    embed-resources: true
-    html-math-method: katex
 jupyter: python3
 ---
 
 ```{python}
-#| label: setup
-#| warning: false
+#| label: imports
+#| output: false
 
 import os
 import time
@@ -27,147 +21,125 @@ import requests
 import logging
 import pickle
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
+from typing import List, Optional
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 @dataclass
 class TherapeuticResponse:
-    """Enhanced therapeutic response container"""
+    """Adapted response structure for philosophical context"""
     text: str
     timestamp: float
     error: bool = False
     processing_time: float = 0.0
     error_details: str = ""
     timeout: bool = False
-    empathy_score: float = 0.0
-    safety_checks: List[str] = None
-    ethical_considerations: List[str] = None
+    conceptual_depth: float = 0.0
+    philosophical_schools: List[str] = None
     refinement_suggestions: List[str] = None
-    crisis_flag: bool = False
+
+    #| label: ollama-client
+#| output: false
 
 class OllamaClient:
-    """Ollama client with therapeutic safety features"""
-    
-    def __init__(self, model_name: str = "hf.co/TheDrummer/Gemmasutra-Mini-2B-v1-GGUF:Q3_K_L", 
-                 base_url: str = "http://localhost:11434"):
+    """Modified client for theoretical discussions"""
+    def __init__(self, model_name: str = "llama2", base_url: str = "http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
-        self.max_retries = 5
-        self.request_timeout = 300
-        self._verify_model()
+        self.max_retries = 3
+        self.request_timeout = 180
 
     def _parse_json_safe(self, text: str):
-        """JSON parsing with error recovery"""
-        clean_text = text.strip()
-        if not clean_text:
-            return {"error": "Empty response"}
+        """Simplified JSON parsing"""
         try:
-            return json.loads(clean_text)
-        except json.JSONDecodeError:
-            start = clean_text.find('{')
-            end = clean_text.rfind('}') + 1
-            return json.loads(clean_text[start:end]) if start != -1 else {"error": "Invalid JSON"}
-        except Exception as e:
-            return {"error": str(e)}
+            return json.loads(text.strip())
+        except:
+            return {"response": text.strip()}
 
-    def _verify_model(self):
-        """Model verification with auto-download"""
+    def generate(self, prompt: str) -> tuple[str, bool]:
+        """Streamlined generation method"""
         for attempt in range(self.max_retries):
             try:
-                resp = requests.get(f"{self.base_url}/api/tags", timeout=10)
-                if resp.ok:
-                    models = [m['name'] for m in resp.json().get('models', [])]
-                    if any(self.model_name in m for m in models):
-                        return
-                    self._pull_model()
-                    return
+                response = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json={
+                        "model": self.model_name,
+                        "prompt": prompt[:3000],
+                        "stream": False,
+                        "options": {"temperature": 0.7}
+                    },
+                    timeout=self.request_timeout
+                )
+                data = self._parse_json_safe(response.text)
+                return data.get("response", ""), False
             except Exception as e:
-                logger.warning(f"Model check failed: {str(e)}")
-                time.sleep(2 ** attempt)
-        raise ConnectionError(f"Connection failed after {self.max_retries} attempts")
-
-    def _pull_model(self):
-        """Model download handler"""
-        try:
-            resp = requests.post(
-                f"{self.base_url}/api/pull",
-                json={"name": self.model_name},
-                stream=True,
-                timeout=600
-            )
-            for line in resp.iter_lines():
-                if line:
-                    status = json.loads(line).get('status', '')
-                    logger.info(f"Download: {status}")
-        except Exception as e:
-            logger.error(f"Model pull failed: {str(e)}")
-            raise
-
-    def generate(self, prompt: str) -> Tuple[str, bool]:
-        """Safe text generation"""
-        for attempt in range(self.max_retries):
-            try:
-                with ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        requests.post,
-                        f"{self.base_url}/api/generate",
-                        json={
-                            "model": self.model_name,
-                            "prompt": prompt[:4000],
-                            "stream": False,
-                            "options": {"temperature": 0.5}
-                        },
-                        timeout=self.request_timeout
-                    )
-                    resp = future.result(timeout=self.request_timeout)
-                    data = self._parse_json_safe(resp.text)
-                    return data.get("response", ""), False
-            except FutureTimeoutError:
-                logger.warning(f"Timeout (attempt {attempt+1})")
-                return f"Timeout after {self.request_timeout}s", True
-            except Exception as e:
-                logger.error(f"Error: {str(e)}")
+                logger.warning(f"Attempt {attempt+1} failed: {e}")
                 time.sleep(1)
-        return "Max retries exceeded", True
+        return f"Error: Failed after {self.max_retries} attempts", True
+
+        #| label: agent
+#| output: false
 
 class BaseAgent:
-    """Therapeutic response agent"""
-    
+    """Simplified agent framework"""
     def __init__(self, client: OllamaClient):
         self.client = client
-        self.retry_count = 3
-        self.max_wait = 300
-
-    def safe_generate(self, prompt: str) -> TherapeuticResponse:
-        """Generation with safety checks"""
-        start_time = time.time()
-        response = TherapeuticResponse(text="", timestamp=start_time)
+        self.retry_count = 2
+        self.max_wait = 120
         
-        if not isinstance(prompt, str) or len(prompt.strip()) == 0:
+    def generate_response(self, prompt: str) -> TherapeuticResponse:
+        """Efficient generation method"""
+        start_time = time.time()
+        
+        if not prompt.strip():
             return TherapeuticResponse(
-                text="Invalid prompt",
+                text="Error: Empty prompt",
                 timestamp=start_time,
                 error=True,
                 processing_time=0.0
             )
             
-        for attempt in range(self.retry_count):
+        for _ in range(self.retry_count):
             try:
-                with ThreadPoolExecutor() as executor:
-                    future = executor.submit(self.client.generate, prompt)
-                    text, error = future.result(timeout=self.max_wait)
-                    response.text = text
-                    response.error = error
-                    response.processing_time = time.time() - start_time
-                    return response
-            except FutureTimeoutError:
-                response.timeout = True
+                text, error = self.client.generate(prompt)
+                return TherapeuticResponse(
+                    text=text,
+                    timestamp=start_time,
+                    error=error,
+                    processing_time=time.time() - start_time
+                )
             except Exception as e:
-                response.error_details = str(e)
+                error_msg = str(e)
+                
+        return TherapeuticResponse(
+            text=error_msg,
+            timestamp=start_time,
+            error=True,
+            processing_time=time.time() - start_time
+        )
 
-        response.error = True
-        return response
+        #| label: demo
+#| output: true
+#| code-line-numbers: true
+
+# Initialize components
+client = OllamaClient(model_name="llama2")
+agent = BaseAgent(client)
+
+# Generate and save response
+prompt = "What are therapeutic responses to Foucault's concept of power-knowledge?"
+response = agent.generate_response(prompt)
+
+# Save and display results
+with open("philosophical_response.pkl", "wb") as f:
+    pickle.dump(response, f)
+
+with open("philosophical_response.pkl", "rb") as file:
+    loaded_response = pickle.load(file)
+
+print("=== Philosophical Analysis ===")
+print(f"Processing Time: {loaded_response.processing_time:.2f}s")
+print("Response Content:\n")
+print(loaded_response.text)
