@@ -1,16 +1,18 @@
 ---
-title: "AI Therapeutic Response Generator"
+title: "AI Therapeutic Response Generator 🤖💬"
+subtitle: "Empathetic AI Mental Health Support"
+author: "AI Health Team"
 format: 
   html:
-    theme: cosmo
-    toc: true
-    toc-depth: 3
+    theme: minty
+    highlight-style: dracula
     code-fold: true
+    code-summary: "Show/Hide Code Implementation"
     code-tools: true
-    highlight-style: github
-    css: custom.css
+    code-line-numbers: true
     page-layout: full
     embed-resources: true
+    html-math-method: katex
 jupyter: python3
 ---
 
